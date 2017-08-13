@@ -7,49 +7,46 @@ extern crate error_chain;
 // Of course, we'll need falcon
 extern crate falcon;
 
-// Falcon uses the standard rust log crate to provide feedback as to what's
-// happening. It's your preferene whether you want to see this, but I do, so
-// I make sure I set up log.
+// Falcon uses the standard rust log crate. It's your preferene whether you want to
+// see Falcon's logging output, but I do, so I always set this up.
 extern crate log;
 
-// Rayon is a, "Data-parallelism library for Rust." We're going to use Rayon
-// to simplify parallelizing Falcon, allowing us to step multiple symbolic
-// executors forward simultaneously. Falcon is thread-safe.
+// Rayon is a, "Data-parallelism library for Rust." We use Rayon to simplify parallelizing
+// Falcon, allowing us to step multiple symbolic executors forward simultaneously. Falcon
+// is thread-safe and meets Rust's thread-safe guarantees.
 extern crate rayon;
 
-// The `il` module gives us the ability to create and modify Falcon IL directly.
-// We'll need to do this if we want to create constraints, or ask questions
-// about different symbolic variables, as symbolic state is represented in
-// Falcon IL.
+// The il module is used to create and modify Falcon IL directly.
+// We use this module to create constraints and query a SymbolicEngine, as all
+// state is represented in Falcon IL.
 use falcon::il;
 
-// The `engine` module contains everything needed for Symbolic Execution.
+// The engine module contains everything needed for Symbolic Execution.
 use falcon::engine;
 
-// The `loader` module will load and link the Elfs we have provided, allowing
-// us to bootstrap a `SymbolicMemory`, lift functions, or even attempt to lift
-// an entire program across all Elfs with relocations pre-resolved.
+// The loader module loads and links the Elfs we have provided, allowing
+// us to bootstrap a SymbolicMemory, and lift functions. If needed, we could even
+// attempt to lift an entire program across all Elfs with relocations pre-resolved.
 use falcon::loader::Loader;
 
-// The `platform` module models a system. We will be using the LinuxX86
-// platform. Currently we only have two system calls modelled, `read` and
-// `write`, but this is enough for Palindrome.
+// The platform module models a system. We use the LinuxX86 platform. Currently LinuxX86
+// only has two system calls modelled, read and write. Fortunately, this is enough
+// for Palindrome.
 use falcon::platform;
 
-// We also need to use the `Platform` trait.
+// We also need to use the Platform trait.
 use falcon::platform::Platform;
 
-// We need this to set up the log crate.
+// Requirements for the log crate.
 use log::{LogRecord, LogLevel, LogLevelFilter, LogMetadata};
 
 // We need rayon prelude for magical parallel iterators.
 use rayon::prelude::*;
 
-// We will specify the path of the binary to load as a rust `Path` object.
+// We specify the path of the binary to load as a rust Path object.
 use std::path::Path;
 
-// We will need to pass certain things wrapped in `Arc` to get our symbolic
-// engine and driver started.
+// We need to pass certain things wrapped in Arc to get our EngineDriver started.
 use std::sync::Arc;
 
 
@@ -122,8 +119,8 @@ fn step_driver_to_address<P> (
 fn get_past_read<P>(driver: engine::EngineDriver<P>)
     -> Result<engine::EngineDriver<P>> where P: platform::Platform<P> + Send + Sync {
 
-    // We are going to keep track of the possible forked states in a Vec of EngineDriver.
-    // We will update this Vec in each iteration of the loop which follows.
+    // We keep track of the possible forked states in a Vec of EngineDriver.
+    // We update this Vec in each iteration of the loop which follows.
     let mut drivers = vec![driver];
 
     loop {
@@ -133,8 +130,8 @@ fn get_past_read<P>(driver: engine::EngineDriver<P>)
         let mut step_drivers = Vec::new();
 
         for driver in drivers {
-            // If the EngineDriver is currently executing an Instruction (as opposed to
-            // a conditional edge, for example), we can query the EngineDriver for the
+            // If the EngineDriver is currently executing an Instruction (as opposed to,
+            // for eaxmple, a conditional edge), we can query the EngineDriver for the
             // address of the instruction being executed. This address is added by the
             // binary lifter, and is the address in memory the instruction was lifted
             // from.
@@ -149,11 +146,11 @@ fn get_past_read<P>(driver: engine::EngineDriver<P>)
                     // We are going to ask the Engine to solve for a value of eax, while also
                     // providing a constraint that eax == 0x80. In the event there is a satisfiable
                     // value state where eax == 0x80, an il::Constant will be returned with the
-                    // value of eax (which will be 0x80 because of our constraints).
+                    // value of eax (which will be 0x80 because of our constraint).
                     //
-                    // At this time in the program, eax is actually an il::Constant, an we could
-                    // just fetch that constant, but this method is more generic and will work for
-                    // scalars which are also symbolic.
+                    // At this time in the program, eax is actually an il::Constant, and we could
+                    // just fetch that constant, but the method below is more generic and will
+                    // work for scalars which are also symbolic.
                     if let Some(eax) = driver.engine().eval(
                         eax,
                         Some(vec![il::Expression::cmpeq(il::expr_scalar("eax", 32), il::expr_const(0x80, 32))?])
@@ -178,12 +175,12 @@ fn get_past_read<P>(driver: engine::EngineDriver<P>)
         }
         // into_par_iter() is a threaded, parallel iterator provided by rayon that
         // allows for simple multi-threading of operations when thread-safe guarantees
-        // are met by code in Rust. Falcon meets these thread-safety requirements, and
+        // are met by code in Rust. Falcon meets these thread-safety guarantees, and
         // we can step through multiple drivers in a parallel fashion.
         //
         // We don't see much benefit using rayon in this particular function, but when
-        // we have many steps to state, we see great performance improvements from
-        // parallelizing the process.
+        // we have many states to step we see great performance improvements from
+        // parallelization.
         drivers = step_drivers.into_par_iter()
                               .map(|d| d.step().unwrap())
                               .reduce(|| Vec::new(), |mut v, mut d| {
@@ -191,9 +188,9 @@ fn get_past_read<P>(driver: engine::EngineDriver<P>)
                                 v
                             });
 
-        // In the event we run our out of drivers, this means all states have been
-        // terminated before reaching our desired condition at 0x8048800. This is
-        // an error condition for us.
+        // In the event we run out of drivers, all states have been terminated before
+        // reaching our desired condition at 0x8048800. This is an error condition
+        // for us.
         if drivers.len() == 0 {
             bail!("Ran out of drivers");
         }
@@ -218,8 +215,7 @@ fn run () -> Result<()> {
     // Create a new `SymbolicMemory`
     let mut memory = engine::SymbolicMemory::new(engine::Endian::Little);
 
-    // We are going to copy over, one byte at a time, the memory from our Loader
-    // into the `SymbolicMemory`.
+    // Copy over, one byte at a time, the memory from our Loader into the `SymbolicMemory`.
     for (address, segment) in elf.memory()?.segments() {
         let bytes = segment.bytes();
         for i in 0..bytes.len() {
@@ -233,8 +229,7 @@ fn run () -> Result<()> {
     // Create a new LinuxX86 platform.
     let mut platform = platform::LinuxX86::new();
 
-    // Initialize both the LinuxX86 platform, and the SymbolicEngine, together
-    // with one another.
+    // Initialize both the LinuxX86 platform, and the SymbolicEngine, together.
     platform.initialize(&mut engine)?;
 
     // Get the architecture translator from the loader so our EngineDriver can
@@ -291,7 +286,7 @@ fn run () -> Result<()> {
     // will receive an in-order Vec of scalars for each byte of input read over stdin.
     let scalars = driver.platform().symbolic_scalars();
 
-    // We're going to solve for a valid value of each symbolic byte of input while enforcing the
+    // Solve for a valid value of each symbolic byte of input while enforcing the
     // constraint that the return address is equal to 0xdeadbeef.
     let values = scalars.iter()
                         .map(|s| engine.eval(&s.clone().into(), constraint.clone()).unwrap().unwrap())
