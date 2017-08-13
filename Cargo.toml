@@ -1,0 +1,14 @@
+[package]
+name = "falcon-palindrome"
+version = "0.1.0"
+authors = [ "Alex Eubanks <endeavor@rainbowsandpwnies.com>" ]
+
+[dependencies]
+error-chain = "0.10"
+falcon = { git = "https://github.com/endeav0r/falcon", rev="d819639" }
+log = "0.3"
+rayon = "0.8.2"
+
+[[bin]]
+name = "falcon_palindrome"
+path = "src/main.rs"
